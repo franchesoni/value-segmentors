@@ -164,3 +164,4 @@ env_*/
 *.csv
 runs/
 data/
+logs/
