@@ -91,12 +91,12 @@ def to_img(tensor, channel_offset=0):
     tensor = minmaxnorm(tensor)
     tensor = (tensor * 255).to(torch.uint8)
     C, H, W = tensor.shape
-    if tensor.shape[0] == 1:
+    if C == 1:
         tensor = tensor[0]
-    elif tensor.shape[0] == 2:
+    elif C == 2:
         tensor = torch.stack([tensor[0], torch.zeros_like(tensor[0]), tensor[1]], dim=0)
         tensor = tensor.permute(1, 2, 0)
-    elif tensor.shape[0] >= 3:
+    elif C >= 3:
         tensor = tensor[channel_offset : channel_offset + 3]
         tensor = tensor.permute(1, 2, 0)
     tensor = tensor.cpu().numpy()
@@ -114,64 +114,15 @@ def log_input_output(
     reduction=REDUCTION,
     resample_size=20000,
 ):
-    y_hat = y_hat.reshape(
-        y_hat.shape[0], y_hat.shape[2], y_hat.shape[3], y_hat.shape[4]
-    )
-    if reduce_dim and y_hat.shape[1] >= 3:
-        reducer = (
-            UMAP(n_components=3)
-            if (reduction == "umap")
-            else (
-                TSNE(n_components=3)
-                if reduction == "tsne"
-                else PCA(n_components=3) if reduction == "pca" else None
-            )
-        )
-        np_y_hat = y_hat.detach().cpu().permute(1, 0, 2, 3).numpy()  # F, 1, B, H, W
-        np_y_hat = np_y_hat.reshape(np_y_hat.shape[0], -1)  # F, BHW
-        np_y_hat = np_y_hat.T  # BHW, F
-        sampled_pixels = np_y_hat[:: np_y_hat.shape[0] // resample_size]
-        print("dim reduction fit..." + " " * 30, end="\r")
-        reducer = reducer.fit(sampled_pixels)
-        print("dim reduction transform..." + " " * 30, end="\r")
-        reducer.transform(np_y_hat[:10])  # to numba compile the function
-        np_y_hat = reducer.transform(np_y_hat)  # BHW, 3
-        # revert back to original shape
-        y_hat2 = (
-            torch.from_numpy(
-                np_y_hat.T.reshape(3, y_hat.shape[0], y_hat.shape[2], y_hat.shape[3])
-            )
-            .to(y_hat.device)
-            .permute(1, 0, 2, 3)
-        )
-        print("done" + " " * 30, end="\r")
-    else:
-        y_hat2 = y_hat
-
     for i in range(min(len(x), 8)):
         save_tensor_as_image(
             x[i],
             img_dstdir / f"input_{name}_{str(i).zfill(2)}",
             global_step=global_step,
         )
-        for c in range(y_hat.shape[1]):
-            save_tensor_as_image(
-                y_hat[i, c : c + 1],
-                out_dstdir / f"pred_channel_{name}_{str(i).zfill(2)}_{c}",
-                global_step=global_step,
-            )
-        # log color image
-
-        assert len(y_hat2.shape) == 4, "should be B, F, H, W"
-        if reduce_dim:
-            save_tensor_as_image(
-                y_hat2[i][:3],
-                out_dstdir / f"pred_reduced_{name}_{str(i).zfill(2)}",
-                global_step=global_step,
-            )
         save_tensor_as_image(
-            y_hat[i][:3],
-            out_dstdir / f"pred_colorchs_{name}_{str(i).zfill(2)}",
+            y_hat[i : i + 1],
+            out_dstdir / f"pred_{name}_{str(i).zfill(2)}",
             global_step=global_step,
         )
 
