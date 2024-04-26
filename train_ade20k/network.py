@@ -214,7 +214,7 @@ class SegHead(nn.Module):
 
 
 class EfficientViTSegL2(nn.Module):
-    def __init__(self, use_norm_params=False, pretrained=False):
+    def __init__(self, use_norm_params=False, pretrained=True):
         super(EfficientViTSegL2, self).__init__()
         self.bbone = efficientvit_l2(
             num_classes=0, features_only=True, pretrained=pretrained
