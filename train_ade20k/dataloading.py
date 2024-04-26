@@ -1,8 +1,31 @@
 import os
+from math import ceil
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms.v2 import Compose, ToImage, ToDtype
-from torch import randint, float32, int64
+from torch import randint, float32, int64, Tensor
+import torch.nn.functional as F
+
+
+def resize(
+    x: Tensor,
+    size: any or None = None,
+    scale_factor: list[float] or None = None,
+    mode: str = "bilinear",
+    align_corners: bool or None = False,
+) -> Tensor:
+    if mode in {"bilinear", "bicubic"}:
+        return F.interpolate(
+            x,
+            size=size,
+            scale_factor=scale_factor,
+            mode=mode,
+            align_corners=align_corners,
+        )
+    elif mode in {"nearest", "area"}:
+        return F.interpolate(x, size=size, scale_factor=scale_factor, mode=mode)
+    else:
+        raise NotImplementedError(f"resize(mode={mode}) not implemented.")
 
 
 class ADE20KDataset(Dataset):
@@ -32,7 +55,7 @@ class ADE20KDataset(Dataset):
 
     def __getitem__(self, index):
         img_path, label_path = self.sample_paths[index]
-        image = Image.open(img_path)
+        image = Image.open(img_path).convert("RGB")
         label = Image.open(label_path)
 
         if self.transform is not None:
@@ -48,20 +71,21 @@ img2tensor = Compose([ToImage(), ToDtype(float32, scale=True)])
 label2tensor = Compose([ToImage(), ToDtype(int64)])
 
 
-def train_transform(pilimage, pillabel):
-    """resize shortest side to 512 and random crop a square of size 512x512"""
-    ratio = 512 / min(pilimage.size)
-    new_size = (int(pilimage.size[0] * ratio), int(pilimage.size[1] * ratio))
+def resize_shortest_side(pilimage, pillabel, size=512):
+    ratio = size / min(pilimage.size)
+    new_size = (ceil(pilimage.size[0] * ratio), ceil(pilimage.size[1] * ratio))
     pilimage = pilimage.resize(new_size, resample=Image.Resampling.LANCZOS)
     pillabel = pillabel.resize(new_size, Image.NEAREST)
-    if new_size[0] > 512:
-        width_excess = new_size[0] - 512
-        width_offset = int(randint(width_excess, (1,)))
-        height_offset = 0
-    else:
-        height_excess = new_size[1] - 512
-        height_offset = int(randint(height_excess, (1,)))
-        width_offset = 0
+    return pilimage, pillabel, new_size
+
+
+def val_transform(pilimage, pillabel):
+    """resize shortest side to 512 and center crop a square of size 512x512"""
+    pilimage, pillabel, new_size = resize_shortest_side(pilimage, pillabel)
+    width_excess = new_size[0] - 512
+    height_excess = new_size[1] - 512
+    width_offset = width_excess // 2
+    height_offset = height_excess // 2
 
     pilimage = pilimage.crop(
         (width_offset, height_offset, width_offset + 512, height_offset + 512)
@@ -70,5 +94,31 @@ def train_transform(pilimage, pillabel):
         (width_offset, height_offset, width_offset + 512, height_offset + 512)
     )
     image = img2tensor(pilimage)
-    label = label2tensor(pillabel)
+    label = label2tensor(pillabel) - 1
     return image, label
+
+
+def train_transform(pilimage, pillabel):
+    """resize shortest side to 512 and random crop a square of size 512x512"""
+    pilimage, pillabel, new_size = resize_shortest_side(pilimage, pillabel)
+    excess = max(new_size) - 512
+    offset = int(randint(0, excess, (1,))) if excess else 0
+    if new_size[0] > 512:
+        width_offset = offset
+        height_offset = 0
+    else:
+        width_offset = 0
+        height_offset = offset
+
+    pilimage = pilimage.crop(
+        (width_offset, height_offset, width_offset + 512, height_offset + 512)
+    )
+    pillabel = pillabel.crop(
+        (width_offset, height_offset, width_offset + 512, height_offset + 512)
+    )
+    image = img2tensor(pilimage)
+    label = label2tensor(pillabel) - 1
+    return image, label
+
+
+# normalize
