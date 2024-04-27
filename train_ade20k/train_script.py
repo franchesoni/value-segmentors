@@ -197,9 +197,15 @@ def train(
             xy = rrc(xy)
             x, y = xy[:, :3], xy[:, 3:]
             x = pmd(norm(x))
-            if torch.isnan(x).any():
-                print(f"nan in x at epoch {epoch} batch {batch_idx}, skipping...")
-                continue
+            nans = torch.isnan(x)
+            if nans.any():
+                idx_with_nan = nans.any(dim=(1, 2, 3))
+                print(f"nan in x at epoch {epoch} batch {batch_idx} elements {idx_with_nan}")
+                if idx_with_nan.sum() > batch_size // 2:
+                    print("more than half of the batch contains nan, skipping...")
+                    continue
+                x = x[~idx_with_nan]
+                y = y[~idx_with_nan]
             y = y.to(torch.int64)
             y = y[:, 0]  # remove channel dim for int labels
             optim.zero_grad()
