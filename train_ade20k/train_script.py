@@ -19,13 +19,9 @@ from utils import (
 )
 from sing import SING
 from dataloading import ADE20KDataset, train_transform, val_transform, resize
+from torchvision.transforms.v2 import RandomResizedCrop, RandomPhotometricDistort, Normalize
 
 
-def get_data():
-    # load here your train and val datasets with your custom collate function
-    train_ds = ProcessedSA1B(datadir, split="training", transform=train_transform)
-
-    return train_ds, val_ds, custom_collate
 
 
 def train(
@@ -143,6 +139,11 @@ def train(
     else:
         optim_state, scheduler_state, global_step = None, None, 0
 
+    # transforms
+    rrc = RandomResizedCrop((512,512))
+    norm = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    pmd = RandomPhotometricDistort()
+
     ################## TRAIN INIT ##################
     print(gpu_number, "Initializing training...")
     total_steps = epochs * len(train_dl)
@@ -190,9 +191,13 @@ def train(
             ### CORE COMPUTATIONS ###
             x, y = batch
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            xy = torch.cat([x, y], dim=1)
             if torch.rand(1) < 0.5:  # random flip
-                x = torch.flip(x, dims=[3])
-                y = torch.flip(y, dims=[3])
+                xy = torch.flip(xy, dims=[3])
+            xy = rrc(xy)
+            x, y = xy[:, :3], xy[:, 3:]
+            x = pmd(norm(x))
+            y = y.to(torch.int64)
             y = y[:, 0]  # remove channel dim for int labels
             optim.zero_grad()
             y_hat = net(x)

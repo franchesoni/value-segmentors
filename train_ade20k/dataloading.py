@@ -121,4 +121,3 @@ def train_transform(pilimage, pillabel):
     return image, label
 
 
-# normalize
