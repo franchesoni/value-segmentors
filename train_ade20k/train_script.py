@@ -200,8 +200,9 @@ def train(
             nans = torch.isnan(x)
             if nans.any():
                 idx_with_nan = nans.any(dim=(1, 2, 3))
-                print(f"nan in x at epoch {epoch} batch {batch_idx} elements {idx_with_nan}")
-                if idx_with_nan.sum() > batch_size // 2:
+                num_nans = idx_with_nan.sum()
+                print(f"{num_nans} nan imgs in batch at epoch {epoch} batch {batch_idx}")
+                if num_nans > batch_size // 2:
                     print("more than half of the batch contains nan, skipping...")
                     continue
                 x = x[~idx_with_nan]
