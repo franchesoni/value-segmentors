@@ -197,6 +197,9 @@ def train(
             xy = rrc(xy)
             x, y = xy[:, :3], xy[:, 3:]
             x = pmd(norm(x))
+            if torch.isnan(x).any():
+                print(f"nan in x at epoch {epoch} batch {batch_idx}, skipping...")
+                continue
             y = y.to(torch.int64)
             y = y[:, 0]  # remove channel dim for int labels
             optim.zero_grad()
